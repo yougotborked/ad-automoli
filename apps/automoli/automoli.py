@@ -170,12 +170,12 @@ class AutoMoLi(hass.Hass):  # type: ignore
                         "No room set yet, using 'AutoMoLi' forlogging to HA",
                         level=logging.DEBUG,
                     )
-
-                self.call_service(
+                ety = self.get_entity("light.esszimmer_decke", )
+                ety.call_service(
                     "logbook/log",
                     name=ha_name,  # type:ignore
                     message=message,  # type:ignore
-                    entity_id="light.esszimmer_decke",  # type:ignore
+                    return_result=True, # type:ignore
                 )
 
     def listr(
@@ -608,7 +608,7 @@ class AutoMoLi(hass.Hass):  # type: ignore
             await self.refresh_timer()
 
     def has_min_ad_version(self, required_version: str) -> bool:
-        required_version = required_version if required_version else "4.0.7"
+        required_version = required_version if required_version else "4.2.0"
         return bool(
             StrictVersion(self.get_ad_version()) >= StrictVersion(required_version)
         )
@@ -620,7 +620,7 @@ class AutoMoLi(hass.Hass):  # type: ignore
             handles = deepcopy(self.room.handles_automoli)
             self.room.handles_automoli.clear()
 
-        if self.has_min_ad_version("4.0.7"):
+        if self.has_min_ad_version("4.2.0"):
             await asyncio.gather(
                 *[
                     self.cancel_timer(handle)
@@ -793,10 +793,8 @@ class AutoMoLi(hass.Hass):  # type: ignore
 
             if self.room.lights_undimmable:
                 for light in self.room.lights_dimmable:
-
-                    await self.call_service(
-                        "light/turn_off",
-                        entity_id=light,  # type:ignore
+                    ety = self.get_entity(light, )
+                    ety.turn_off(
                         **dim_attributes,  # type:ignore
                     )
                     await self.set_state(entity=light, state="off")
@@ -817,7 +815,8 @@ class AutoMoLi(hass.Hass):  # type: ignore
         if lights := kwargs.get("lights"):
             self.lg(f"{stack()[0][3]}: {lights = }", level=logging.DEBUG)
             for light in lights:
-                await self.call_service("homeassistant/turn_off", entity_id=light)
+                ety = self.get_entity(light, )
+                await ety.turn_off()
             self.run_in_thread(self.turned_off, thread=self.notify_thread)
 
     async def lights_on(self, force: bool = False) -> None:
@@ -879,10 +878,12 @@ class AutoMoLi(hass.Hass):  # type: ignore
                 if self.active["is_hue_group"] and await self.get_state(
                     entity_id=entity, attribute="is_hue_group"
                 ):
-                    await self.call_service(
+                    ety = self.get_entity(entity, )
+                    await ety.call_service(
                         "hue/hue_activate_scene",
                         group_name=await self.friendly_name(entity),  # type:ignore
                         scene_name=light_setting,  # type:ignore
+                        return_result=True, # type:ignore
                     )
                     if self.only_own_events:
                         self._switched_on_by_automoli.add(entity)
@@ -890,9 +891,8 @@ class AutoMoLi(hass.Hass):  # type: ignore
 
                 item = light_setting if light_setting.startswith("scene.") else entity
 
-                await self.call_service(
-                    "homeassistant/turn_on", entity_id=item  # type:ignore
-                )  # type:ignore
+                ety = self.get_entity(entity, )
+                await ety.turn_on()
                 if self.only_own_events:
                     self._switched_on_by_automoli.add(item)
 
@@ -919,13 +919,11 @@ class AutoMoLi(hass.Hass):  # type: ignore
 
                 for entity in self.lights:
                     if entity.startswith("switch."):
-                        await self.call_service(
-                            "homeassistant/turn_on", entity_id=entity  # type:ignore
-                        )
+                        ety = self.get_entity(entity, )
+                        await ety.turn_on()
                     else:
-                        await self.call_service(
-                            "homeassistant/turn_on",
-                            entity_id=entity,  # type:ignore
+                        ety = self.get_entity(entity, )
+                        await ety.turn_on(
                             brightness_pct=light_setting,  # type:ignore
                         )
 
@@ -973,15 +971,15 @@ class AutoMoLi(hass.Hass):  # type: ignore
         for entity in self.lights:
             if self.only_own_events:
                 if entity in self._switched_on_by_automoli:
-                    await self.call_service(
-                        "homeassistant/turn_off", entity_id=entity  # type:ignore
-                    )  # type:ignore
+                    ety = self.get_entity(entity, )
+                    await ety.turn_off()
+
                     self._switched_on_by_automoli.remove(entity)
                     at_least_one_turned_off = True
             else:
-                await self.call_service(
-                    "homeassistant/turn_off", entity_id=entity  # type:ignore
-                )  # type:ignore
+                ety = self.get_entity(entity, )
+                await ety.turn_off()
+
                 at_least_one_turned_off = True
         if at_least_one_turned_off:
             self.run_in_thread(self.turned_off, thread=self.notify_thread)
